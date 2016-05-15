@@ -1,9 +1,6 @@
 ; Declare constants used for creating a multiboot header.
-MBALIGN     equ  1<<0                   ; align loaded modules on page boundaries
-MEMINFO     equ  1<<1                   ; provide memory map
-ARCH        equ  MBALIGN | MEMINFO      ; the architecture
+ARCH        equ  0                      ; the architecture
 MAGIC       equ  0xE85250D6             ; Multiboot spec magic
-CHECKSUM    equ -(MAGIC + FLAGS)        ; checksum of above, to prove we are multiboot
 
 ; Declare a header as in the Multiboot Standard. We put this into a special
 ; section so we can force the header to be in the start of the final program.
@@ -16,24 +13,30 @@ header_start:
 	dd MAGIC
 	dd ARCH
   dd header_end - header_start
-	dd -(MAGIC + ARCH + (header_end - header_start))
+	dd 0x100000000-(MAGIC + ARCH + (header_end - header_start))  ; Checksum
+
+  ; End tag
+  dw 0
+  dw 0
+  dd 8
 header_end:
 
 ; Currently the stack pointer register (esp) points at anything and using it may
 ; cause massive harm. Instead, we'll provide our own stack. We will allocate
 ; room for a small temporary stack by creating a symbol at the bottom of it,
 ; then allocating 16384 bytes for it, and finally creating a symbol at the top.
-section .bootstrap_stack, nobits
-align 4
-stack_bottom:
-resb 16384
-stack_top:
+;section .bootstrap_stack, nobits
+;align 4
+;stack_bottom:
+;resb 16384
+;stack_top:
 
 ; The linker script specifies _start as the entry point to the kernel and the
 ; bootloader will jump to this position once the kernel has been loaded. It
 ; doesn't make sense to return from this function as the bootloader is gone.
 section .text
 global _start
+bits 32
 _start:
 	; Welcome to kernel mode! We now have sufficient code for the bootloader to
 	; load and run our operating system. It doesn't do anything interesting yet.
@@ -57,20 +60,22 @@ _start:
 
 	; To set up a stack, we simply set the esp register to point to the top of
 	; our stack (as it grows downwards).
-	mov esp, stack_top
+	;mov esp, stack_top
 
 	; We are now ready to actually execute C code. We cannot embed that in an
 	; assembly file, so we'll create a kernel.c file in a moment. In that file,
 	; we'll create a C entry point called kernel_main and call it here.
-	extern kernel_main
-	call kernel_main
+	;extern kernel_main
+	;call kernel_main
 
 	; In case the function returns, we'll want to put the computer into an
 	; infinite loop. To do that, we use the clear interrupt ('cli') instruction
 	; to disable interrupts, the halt instruction ('hlt') to stop the CPU until
 	; the next interrupt arrives, and jumping to the halt instruction if it ever
 	; continues execution, just to be safe.
-	cli
-.hang:
-	hlt
-	jmp .hang
+	;cli
+  mov dword [0xb8000], 0x2f4b2f4f
+  hlt
+;.hang:
+;	hlt
+;	jmp .hang
